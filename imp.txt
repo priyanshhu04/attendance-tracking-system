@@ -1,0 +1,7 @@
+user pool id: us-east-1_Ine9Gic8v
+app client id: 46155qceoan0c2rco2mo6mk70
+app client secret: fh7bsulbpgqosak2ujl4l9uaq55vdjph650ddqhqv5u1ahci9qk
+AWS region: us-east-1
+
+RDS DB Password: Tracker-2026
+RDS Endpoint: attendance-db.cari4oa424ti.us-east-1.rds.amazonaws.com
