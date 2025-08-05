@@ -1,6 +1,8 @@
 import streamlit as st
+import time
 import boto3
 import mysql.connector
+from mysql.connector import Error
 import pandas as pd
 from datetime import datetime, date
 import json
@@ -40,18 +42,26 @@ cognito_client = init_cognito_client()
 # Database connection
 @st.cache_resource
 def init_db_connection():
-    try:
-        connection = mysql.connector.connect(
-            host=RDS_HOST,
-            user=RDS_USER,
-            password=RDS_PASSWORD,
-            database=RDS_DATABASE,
-            autocommit=True
-        )
-        return connection
-    except mysql.connector.Error as e:
-        st.error(f"Database connection failed: {e}")
-        return None
+    max_attempts = 3
+    delay = 2  # seconds
+    for attempt in range(1, max_attempts + 1):
+        try:
+            connection = mysql.connector.connect(
+                host=RDS_HOST,
+                user=RDS_USER,
+                password=RDS_PASSWORD,
+                database=RDS_DATABASE,
+                connect_timeout=5,  # 5 seconds timeout
+                autocommit=True
+            )
+            return connection
+        except Error as e:
+            st.error(f"Database connection attempt {attempt} failed: {e}")
+            if attempt < max_attempts:
+                time.sleep(delay)
+            else:
+                st.error("Max database connection attempts exceeded. Please check your RDS settings.")
+                return None
 
 # Helper functions
 def get_secret_hash(username):
@@ -246,7 +256,7 @@ def main():
 
 def auth_page():
     """Authentication page"""
-    st.header("🔐 Login / Sign Up")
+    st.header("🔐 Login / 📝Sign Up")
     
     tab1, tab2 = st.tabs(["Login", "Sign Up"])
     
@@ -297,33 +307,38 @@ def auth_page():
             new_password = st.text_input("Password", type="password")
             confirm_password = st.text_input("Confirm Password", type="password")
             signup_button = st.form_submit_button("Sign Up")
-            
+
             if signup_button:
                 if new_username and new_email and new_password and confirm_password:
                     if new_password == confirm_password:
                         with st.spinner("Creating account..."):
                             result, error = sign_up_user(new_username, new_password, new_email)
-                            
+
                             if result:
                                 st.success("Account created! Please check your email for verification code.")
-                                
-                                # Confirmation code input
-                                with st.form("confirm_form"):
-                                    confirmation_code = st.text_input("Verification Code")
-                                    confirm_button = st.form_submit_button("Confirm Account")
-                                    
-                                    if confirm_button and confirmation_code:
-                                        success, error = confirm_signup(new_username, confirmation_code)
-                                        if success:
-                                            st.success("Account confirmed! You can now login.")
-                                        else:
-                                            st.error(f"Confirmation failed: {error}")
+                                st.session_state.show_confirmation = True
+                                st.session_state.pending_username = new_username
                             else:
                                 st.error(f"Sign up failed: {error}")
                     else:
                         st.error("Passwords do not match")
                 else:
                     st.error("Please fill all fields")
+
+        # Confirmation form shown separately (outside signup form)
+        if st.session_state.show_confirmation:
+            st.subheader("Confirm Account")
+            with st.form("confirm_form"):
+                confirmation_code = st.text_input("Verification Code")
+                confirm_button = st.form_submit_button("Confirm Account")
+
+                if confirm_button:
+                    success, error = confirm_signup(st.session_state.pending_username, confirmation_code)
+                    if success:
+                        st.success("Account confirmed! You can now log in.")
+                        st.session_state.show_confirmation = False
+                    else:
+                        st.error(f"Confirmation failed: {error}")
 
 def mark_attendance_page():
     """Mark attendance page"""
