@@ -256,8 +256,14 @@ def main():
 
 def auth_page():
     """Authentication page"""
-    st.header("🔐 Login / 📝Sign Up")
-    
+    # Initialize session state variables if not present
+    if "show_confirmation" not in st.session_state:
+        st.session_state["show_confirmation"] = False
+    if "pending_username" not in st.session_state:
+        st.session_state["pending_username"] = ""
+
+    st.header("🔐 Login / Sign Up")
+
     tab1, tab2 = st.tabs(["Login", "Sign Up"])
     
     with tab1:
