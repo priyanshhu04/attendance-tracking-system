@@ -254,6 +254,20 @@ def main():
     else:
         auth_page()
 
+def resend_confirmation_code(username):
+    """Resend the confirmation code to the user."""
+    if not username:
+        return False, "Username cannot be empty."
+    try:
+        cognito_client.resend_confirmation_code(
+            ClientId=CLIENT_ID,
+            Username=username,
+            SecretHash=get_secret_hash(username)
+        )
+        return True, None
+    except ClientError as e:
+        return False, str(e)
+    
 def auth_page():
     """Authentication page"""
     # Initialize session state variables if not present
@@ -262,11 +276,10 @@ def auth_page():
     if "pending_username" not in st.session_state:
         st.session_state["pending_username"] = ""
 
-    st.header("🔐 Login / Sign Up")
-
-    tab1, tab2 = st.tabs(["Login", "Sign Up"])
+    st.header("🔐 Login / Sign Up / Confirm Account")
+    tabs = st.tabs(["Login", "Sign Up", "Confirm Account"])
     
-    with tab1:
+    with tabs[0]:
         st.subheader("Login")
         with st.form("login_form"):
             username = st.text_input("Username/Email")
@@ -301,11 +314,18 @@ def auth_page():
                             else:
                                 st.error(f"Failed to get user info: {error}")
                         else:
-                            st.error(f"Login failed: {error}")
+                            # Check if error is user not confirmed
+                            if "UserNotConfirmedException" in error:
+                                st.warning("Your account is not confirmed. Please go to the 'Confirm Account' tab to complete confirmation.")
+                                # Optional: Set pending_username so user doesn’t have to retype
+                                st.session_state.pending_username = username
+                                st.session_state.show_confirmation = True
+                            else:
+                                st.error(f"Login failed: {error}")
                 else:
                     st.error("Please enter both username and password")
     
-    with tab2:
+    with tabs[1]:
         st.subheader("Sign Up")
         with st.form("signup_form"):
             new_username = st.text_input("Username")
@@ -331,20 +351,53 @@ def auth_page():
                 else:
                     st.error("Please fill all fields")
 
-        # Confirmation form shown separately (outside signup form)
-        if st.session_state.show_confirmation:
-            st.subheader("Confirm Account")
-            with st.form("confirm_form"):
-                confirmation_code = st.text_input("Verification Code")
-                confirm_button = st.form_submit_button("Confirm Account")
+        # # Confirmation form shown separately (outside signup form)
+        # if st.session_state.show_confirmation:
+        #     st.subheader("Confirm Account")
+        #     with st.form("confirm_form"):
+        #         confirmation_code = st.text_input("Verification Code")
+        #         confirm_button = st.form_submit_button("Confirm Account")
 
-                if confirm_button:
-                    success, error = confirm_signup(st.session_state.pending_username, confirmation_code)
-                    if success:
-                        st.success("Account confirmed! You can now log in.")
-                        st.session_state.show_confirmation = False
-                    else:
-                        st.error(f"Confirmation failed: {error}")
+        #         if confirm_button:
+        #             success, error = confirm_signup(st.session_state.pending_username, confirmation_code)
+        #             if success:
+        #                 st.success("Account confirmed! You can now log in.")
+        #                 st.session_state.show_confirmation = False
+        #             else:
+        #                 st.error(f"Confirmation failed: {error}")
+    with tabs[2]:
+        st.subheader("Confirm Your Account")
+        default_username = st.session_state.pending_username if st.session_state.show_confirmation else ""
+        username_to_confirm = st.text_input("Username", value=default_username)
+        confirmation_code = st.text_input("Verification Code")
+
+        col1, col2 = st.columns([1,1])
+        with col1:
+            confirm_button = st.button("Confirm Account")
+        with col2:
+            resend_button = st.button("Resend Confirmation Code")
+
+        if confirm_button:
+            if not username_to_confirm or not confirmation_code:
+                st.error("Please enter both username and confirmation code.")
+            else:
+                success, error = confirm_signup(username_to_confirm, confirmation_code)
+                if success:
+                    st.success("Account confirmed! You can now login.")
+                    st.session_state.show_confirmation = False
+                    st.session_state.pending_username = ""
+                else:
+                    st.error(f"Confirmation failed: {error}")
+
+        if resend_button:
+            if not username_to_confirm:
+                st.error("Please enter your username to resend confirmation code.")
+            else:
+                success, error = resend_confirmation_code(username_to_confirm)
+                if success:
+                    st.success(f"Confirmation code resent to the email associated with {username_to_confirm}.")
+                else:
+                    st.error(f"Failed to resend confirmation code: {error}")
 
 def mark_attendance_page():
     """Mark attendance page"""
